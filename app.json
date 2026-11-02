@@ -1,13 +1,14 @@
 {
   "expo": {
-    "name": "bike-miles",
+    "name": "Bike Miles",
     "slug": "bike-miles",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.richelkins.bikemiles"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +21,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Bike Miles reads your cycling workouts to total up your miles.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ]
+    ]
   }
 }

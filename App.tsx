@@ -10,12 +10,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { isConfigured, loadCachedRides, METERS_PER_MILE, Ride, syncRides } from './src/strava';
+import { isHealthSupported, loadHealthRides } from './src/health';
+import { METERS_PER_MILE, Ride } from './src/rides';
 
 const ORANGE = '#FC4C02';
 
-// Strava's start_date_local is the rider's wall-clock time with a fake "Z" suffix,
-// so read the date parts straight from the string instead of converting time zones.
+// startDateLocal is the rider's wall-clock time, so read the date parts
+// straight from the string instead of converting time zones.
 function localParts(ride: Ride) {
   const [y, m, d] = ride.startDateLocal.slice(0, 10).split('-').map(Number);
   return { y, m, d, date: new Date(y, m - 1, d) };
@@ -85,11 +86,11 @@ function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (full = false) => {
+  const refresh = useCallback(async () => {
     setRefreshing(true);
     setError(null);
     try {
-      setRides(await syncRides(full));
+      setRides(await loadHealthRides());
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -98,11 +99,7 @@ function Home() {
   }, []);
 
   useEffect(() => {
-    // Show cached rides instantly, then pull anything new from Strava.
-    loadCachedRides().then((cached) => {
-      if (cached.length) setRides(cached);
-      refresh();
-    });
+    refresh();
   }, [refresh]);
 
   const totals = useMemo(() => computeTotals(rides ?? []), [rides]);
@@ -111,7 +108,7 @@ function Home() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={ORANGE} size="large" />
-        <Text style={styles.muted}>Loading your rides from Strava…</Text>
+        <Text style={styles.muted}>Reading your rides from Apple Health…</Text>
       </View>
     );
   }
@@ -122,7 +119,7 @@ function Home() {
       keyExtractor={(r) => String(r.id)}
       renderItem={({ item }) => <RideRow ride={item} />}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={() => refresh()} tintColor={ORANGE} />
+        <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={ORANGE} />
       }
       ListHeaderComponent={
         <View>
@@ -142,25 +139,39 @@ function Home() {
           <Text style={styles.section}>Recent rides</Text>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.muted}>No rides found yet.</Text>}
-      ListFooterComponent={
-        <Pressable onPress={() => refresh(true)} disabled={refreshing} style={styles.resync}>
-          <Text style={styles.resyncText}>Re-download all rides</Text>
-          <Text style={styles.muted}>Use this if you edited or deleted rides on Strava.</Text>
-        </Pressable>
-      }
+      ListEmptyComponent={<NoRidesHelp onRetry={refresh} busy={refreshing} />}
       contentContainerStyle={styles.list}
     />
   );
 }
 
-function NotConfigured() {
+// iOS never tells an app that Health access was denied — it just returns no
+// data — so an empty list has to explain every likely cause.
+function NoRidesHelp({ onRetry, busy }: { onRetry: () => void; busy: boolean }) {
+  return (
+    <View style={styles.help}>
+      <Text style={styles.helpTitle}>No rides found in Apple Health</Text>
+      <Text style={styles.helpItem}>
+        • Allow access: Settings → Health → Data Access & Devices → Bike Miles → turn on Workouts.
+      </Text>
+      <Text style={styles.helpItem}>
+        • Using Garmin? In Garmin Connect: More → Settings → Connected Apps → Apple Health, and
+        turn on Workouts.
+      </Text>
+      <Text style={styles.helpItem}>• Rides must be recorded as a Cycling workout.</Text>
+      <Pressable onPress={onRetry} disabled={busy} style={styles.retry}>
+        <Text style={styles.retryText}>Check again</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function Unsupported() {
   return (
     <View style={styles.center}>
-      <Text style={styles.title}>Connect Strava</Text>
+      <Text style={styles.title}>iPhone only</Text>
       <Text style={styles.muted}>
-        Copy .env.example to .env.local, add your Strava client ID and secret, run{' '}
-        <Text style={{ fontWeight: '600' }}>npm run strava-auth</Text>, then restart the app.
+        Bike Miles reads your rides from Apple Health, which is only available on iPhone.
       </Text>
     </View>
   );
@@ -170,7 +181,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        {isConfigured() ? <Home /> : <NotConfigured />}
+        {isHealthSupported() ? <Home /> : <Unsupported />}
         <StatusBar style="dark" />
       </SafeAreaView>
     </SafeAreaProvider>
@@ -204,6 +215,9 @@ const styles = StyleSheet.create({
   rowMiles: { fontSize: 18, fontWeight: '700', color: ORANGE },
   muted: { fontSize: 14, color: '#6B6B6B', textAlign: 'center' },
   error: { backgroundColor: '#FDECEA', color: '#B3261E', padding: 12, borderRadius: 8, marginBottom: 12 },
-  resync: { alignItems: 'center', paddingVertical: 24, gap: 4 },
-  resyncText: { fontSize: 15, fontWeight: '600', color: ORANGE },
+  help: { backgroundColor: '#fff', borderRadius: 12, padding: 16, gap: 8 },
+  helpTitle: { fontSize: 16, fontWeight: '600', color: '#1A1A1A' },
+  helpItem: { fontSize: 14, color: '#4A4A4A', lineHeight: 20 },
+  retry: { alignSelf: 'flex-start', marginTop: 4, paddingVertical: 8 },
+  retryText: { fontSize: 15, fontWeight: '600', color: ORANGE },
 });

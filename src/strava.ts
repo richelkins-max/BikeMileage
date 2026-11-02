@@ -1,4 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ride } from './rides';
+
+// Not used by the app right now (it reads Apple Health — see health.ts).
+// Kept for a future optional "Connect Strava" feature.
 
 // Note: EXPO_PUBLIC_ values are bundled into the app in plain text. That's fine
 // for a personal, single-user app you never publish — don't ship it to a store.
@@ -7,7 +11,7 @@ const CLIENT_SECRET = process.env.EXPO_PUBLIC_STRAVA_CLIENT_SECRET;
 const INITIAL_REFRESH_TOKEN = process.env.EXPO_PUBLIC_STRAVA_REFRESH_TOKEN;
 
 const TOKEN_KEY = 'strava.token.v1';
-const RIDES_KEY = 'strava.rides.v1';
+const RIDES_KEY = 'strava.rides.v2';
 
 const RIDE_SPORT_TYPES = new Set([
   'Ride',
@@ -19,19 +23,6 @@ const RIDE_SPORT_TYPES = new Set([
   'Velomobile',
   'Handcycle',
 ]);
-
-export const METERS_PER_MILE = 1609.344;
-
-export type Ride = {
-  id: number;
-  name: string;
-  sportType: string;
-  distanceMeters: number;
-  movingTimeSec: number;
-  elevationGainMeters: number;
-  startDate: string; // ISO, UTC
-  startDateLocal: string; // ISO, rider's local time (no real offset)
-};
 
 type StoredToken = { accessToken: string; refreshToken: string; expiresAt: number };
 
@@ -87,7 +78,7 @@ async function fetchRidesAfter(afterEpochSec: number): Promise<Ride[]> {
     for (const a of batch) {
       if (!RIDE_SPORT_TYPES.has(a.sport_type)) continue;
       rides.push({
-        id: a.id,
+        id: String(a.id),
         name: a.name,
         sportType: a.sport_type,
         distanceMeters: a.distance,
@@ -116,7 +107,7 @@ export async function syncRides(full = false): Promise<Ride[]> {
   const newest = cached.reduce((max, r) => Math.max(max, Date.parse(r.startDate) / 1000), 0);
   const fresh = await fetchRidesAfter(newest);
 
-  const byId = new Map<number, Ride>();
+  const byId = new Map<string, Ride>();
   for (const r of cached) byId.set(r.id, r);
   for (const r of fresh) byId.set(r.id, r);
   const all = [...byId.values()].sort((a, b) => b.startDate.localeCompare(a.startDate));
